@@ -174,19 +174,27 @@ func (h *Connection) readOne() bool {
 	switch hdr.Get("Content-Type") {
 	case "command/reply":
 		reply := hdr.Get("Reply-Text")
-		if reply[:2] == "-E" {
-			h.err <- errors.New(reply[5:])
+		if strings.HasPrefix(reply, "-E") {
+			if len(reply) > 5 {
+				h.err <- errors.New(reply[5:])
+			} else {
+				h.err <- errors.New(reply)
+			}
 			return true
 		}
-		if reply[0] == '%' {
+		if strings.HasPrefix(reply, "%") {
 			copyHeaders(&hdr, resp, true)
 		} else {
 			copyHeaders(&hdr, resp, false)
 		}
 		h.cmd <- resp
 	case "api/response":
-		if string(resp.Body[:2]) == "-E" {
-			h.err <- errors.New(string(resp.Body)[5:])
+		if strings.HasPrefix(resp.Body, "-E") {
+			if len(resp.Body) > 5 {
+				h.err <- errors.New(resp.Body[5:])
+			} else {
+				h.err <- errors.New(resp.Body)
+			}
 			return true
 		}
 		copyHeaders(&hdr, resp, false)
@@ -219,6 +227,7 @@ func (h *Connection) readOne() bool {
 		tmp := make(EventHeader)
 		err := json.Unmarshal([]byte(resp.Body), &tmp)
 		if err != nil {
+			fmt.Println("Hi", resp.Body)
 			h.err <- err
 			return false
 		}
@@ -226,7 +235,7 @@ func (h *Connection) readOne() bool {
 		for k, v := range tmp {
 			resp.Header[capitalize(k)] = v
 		}
-		if v, _ := resp.Header["_body"]; v != "" {
+		if v := resp.Header.Get("_body"); v != "" {
 			resp.Body = v
 			delete(resp.Header, "_body")
 		} else {
@@ -279,6 +288,9 @@ func (h *Connection) ReadEvent() (*Event, error) {
 func copyHeaders(src *textproto.MIMEHeader, dst *Event, decode bool) {
 	var err error
 	for k, v := range *src {
+		if len(v) == 0 {
+			continue
+		}
 		k = capitalize(k)
 		if decode {
 			dst.Header[k], err = url.QueryUnescape(v[0])
@@ -295,6 +307,9 @@ func copyHeaders(src *textproto.MIMEHeader, dst *Event, decode bool) {
 // Headers such as Job-UUID become Job-Uuid and so on. Headers starting with
 // Variable_ only replace ^v with V, and headers staring with _ are ignored.
 func capitalize(s string) string {
+	if len(s) == 0 {
+		return s
+	}
 	if s[0] == '_' {
 		return s
 	}
@@ -443,7 +458,14 @@ func (h *Connection) ExecuteUUID(uuid, appName, appArg string) (*Event, error) {
 }
 
 // EventHeader represents events as a pair of key:value.
-type EventHeader map[string]string
+type EventHeader map[string]interface{}
+
+func (r EventHeader) Get(key string) string {
+	if v, ok := r[key].(string); ok {
+		return v
+	}
+	return ""
+}
 
 // Event represents a FreeSWITCH event.
 type Event struct {
@@ -461,13 +483,13 @@ func (r *Event) String() string {
 
 // Get returns an Event value, or "" if the key doesn't exist.
 func (r *Event) Get(key string) string {
-	return r.Header[key]
+	return r.Header.Get(key)
 }
 
 // GetInt returns an Event value converted to int, or an error if conversion
 // is not possible.
 func (r *Event) GetInt(key string) (int, error) {
-	n, err := strconv.Atoi(r.Header[key])
+	n, err := strconv.Atoi(r.Get(key))
 	if err != nil {
 		return 0, err
 	}
