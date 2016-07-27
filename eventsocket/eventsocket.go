@@ -471,9 +471,13 @@ func (r EventHeader) Get(key string) string {
 func (r EventHeader) GetSlice(key string) []string {
 	var s []string
 	if v, ok := r[key]; ok {
-		a := v.([]interface{})
-		for _, d := range a {
-			s = append(s, d.(string))
+		a, b := v.([]interface{})
+		if b == true {
+			for _, d := range a {
+				s = append(s, d.(string))
+			}
+		} else {
+			s = append(s, r.Get(key))
 		}
 	}
 	return s
