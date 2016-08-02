@@ -85,8 +85,9 @@ func (h *RequestHub) run() {
 				h.requests[request.UUID] = request
 			case response := <-h.responses:
 				//TODO: look for UUID in event, and check for request in request object
-				h.requests[response.UUID].resp <- response.body
-				delete(h.requests, response.UUID)
+				fmt.Printf("RESPONSE %+v", response)
+				//h.requests[response.UUID].resp <- response.body
+				//delete(h.requests, response.UUID)
 
 			/*case timeout := <-h.timeout:
 				for _, req := range h.requests {
@@ -295,6 +296,11 @@ func (h *Connection) readOne() bool {
 		}
 		// we dont return `BACKGROUND_JOB` events
 		if tmp["Event-Name"] == "BACKGROUND_JOB" {
+			j := &JobResponse{
+				UUID: tmp["Job-UUID"].(string),
+				body: tmp["_body"].(string),
+			}
+			h.hub.responses <- j
 			return false
 		}
 		// capitalize header keys for consistency.
