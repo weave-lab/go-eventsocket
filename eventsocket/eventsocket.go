@@ -88,12 +88,12 @@ func (h *RequestHub) run() {
 				h.requests[response.UUID].resp <- response.body
 				delete(h.requests, response.UUID)
 
-			case timeout := <-h.timeout:
+			/*case timeout := <-h.timeout:
 				for _, req := range h.requests {
 					if (time.Now - req.timestamp) > (time.Millisecond * requestTimeout) {
 						req.resp <- "Error: timeout"
 					}
-				}
+				}*/
 			}
 		}
 	}()
@@ -198,6 +198,8 @@ func Dial(addr, passwd string) (*Connection, error) {
 		return nil, errInvalidPassword
 	}
 	go h.readLoop()
+	// subscribe to `BACKGROUND_JOB` on connect
+	go h.Send("events json BACKGROUND_JOB")
 	return h, err
 }
 
@@ -289,6 +291,10 @@ func (h *Connection) readOne() bool {
 		if err != nil {
 			fmt.Println("Hi", resp.Body)
 			h.err <- err
+			return false
+		}
+		// we dont return `BACKGROUND_JOB` events
+		if tmp["Event-Name"] == "BACKGROUND_JOB" {
 			return false
 		}
 		// capitalize header keys for consistency.
