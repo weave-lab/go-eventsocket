@@ -29,10 +29,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const bufferSize = 1024 << 6 // For the socket reader
 const eventsBuffer = 16      // For the events channel (memory eater!)
+const requestTimeout = 2000
 
 var errMissingAuthRequest = errors.New("Missing auth request")
 var errInvalidPassword = errors.New("Invalid password")
@@ -45,6 +47,56 @@ type Connection struct {
 	textreader    *textproto.Reader
 	err           chan error
 	cmd, api, evt chan *Event
+	hub           *RequestHub
+}
+
+type Request struct {
+	UUID      string
+	timestamp time.Time
+	resp      chan string
+	command   string
+}
+
+type JobResponse struct {
+	UUID string
+	body string
+}
+
+type RequestHub struct {
+	requests  map[string]*Request
+	inbound   chan *Request
+	responses chan *JobResponse
+	timeout   chan bool
+}
+
+func (h *RequestHub) run() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			h.timeout <- true
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case request := <-h.inbound:
+				//TODO: send to FS event socket, get UUID
+				request.UUID = "newUUIDfromFS"
+				h.requests[request.UUID] = request
+			case response := <-h.responses:
+				//TODO: look for UUID in event, and check for request in request object
+				h.requests[response.UUID].resp <- response.body
+				delete(h.requests, response.UUID)
+
+			case timeout := <-h.timeout:
+				for _, req := range h.requests {
+					if (time.Now - req.timestamp) > (time.Millisecond * requestTimeout) {
+						req.resp <- "Error: timeout"
+					}
+				}
+			}
+		}
+	}()
 }
 
 // newConnection allocates a new Connection and initialize its buffers.
@@ -57,6 +109,14 @@ func newConnection(c net.Conn) *Connection {
 		api:    make(chan *Event),
 		evt:    make(chan *Event, eventsBuffer),
 	}
+	hub := &RequestHub{
+		requests:  make(map[string]*Request),
+		inbound:   make(chan *Request),
+		responses: make(chan *JobResponse),
+		timeout:   make(chan bool),
+	}
+	h.hub = hub
+	h.hub.run()
 	h.textreader = textproto.NewReader(h.reader)
 	return &h
 }
@@ -355,6 +415,13 @@ func (h *Connection) Send(command string) (*Event, error) {
 	case ev = <-h.api:
 		return ev, nil
 	}
+}
+
+// Bgapi runs a background api request on freeswitch
+func (h *Connection) Bgapi(command string, resp chan string) {
+	req := &Request{}
+	req.resp = resp
+
 }
 
 // MSG is the container used by SendMsg to store messages sent to FreeSWITCH.
