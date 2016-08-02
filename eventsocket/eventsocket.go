@@ -87,7 +87,7 @@ func (h *RequestHub) run() {
 				//TODO: look for UUID in event, and check for request in request object
 				fmt.Printf("RESPONSE %+v", response)
 				//h.requests[response.UUID].resp <- response.body
-				//delete(h.requests, response.UUID)
+				delete(h.requests, response.UUID)
 
 			/*case timeout := <-h.timeout:
 				for _, req := range h.requests {
@@ -301,7 +301,7 @@ func (h *Connection) readOne() bool {
 				body: tmp["_body"].(string),
 			}
 			h.hub.responses <- j
-			return false
+			return true
 		}
 		// capitalize header keys for consistency.
 		for k, v := range tmp {
