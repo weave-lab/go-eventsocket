@@ -30,6 +30,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	uuid "github.com/weave-lab/go-utilities/uuid"
 )
 
 const bufferSize = 1024 << 6 // For the socket reader
@@ -78,12 +80,10 @@ func (h *RequestHub) run() {
 		for {
 			select {
 			case request := <-h.inbound:
-				//TODO: send to FS event socket, get UUID
-				request.UUID = "newUUIDfromFS"
 				h.requests[request.UUID] = request
 			case response := <-h.responses:
 				fmt.Printf("RESPONSE %+v", response)
-				req, ok := h.requests[response.Header["JobUUID"].(string)]
+				req, ok := h.requests[response.Header["Job-Uuid"].(string)]
 				if ok != true {
 					break
 				}
@@ -433,18 +433,14 @@ func (h *Connection) Bgapi(command string) (string, error) {
 	req.command = command
 	req.timestamp = time.Now()
 
-	e, err := h.Send(fmt.Sprintf("bgapi %s", command))
+	u := uuid.NewV4()
+	jobID, _ := uuid.Formatter(u, uuid.CleanHyphen)
+
+	_, err := h.Send(fmt.Sprintf("bgapi %s\r\njob-uuid: %s", command, jobID))
 	if err != nil {
 		return "", err
 	}
-	if !strings.HasPrefix(e.Body, "+OK Job-UUID") {
-		return "", errors.New("bgapi command did not return Job-UUID")
-	}
-	bgapiSlice := strings.Split(e.Body, ":")
-	if len(bgapiSlice) != 2 {
-		return "", fmt.Errorf("Unexpected bgapi response: %s", e.Body)
-	}
-	jobID := strings.TrimSpace(bgapiSlice[1])
+
 	req.UUID = jobID
 	h.hub.inbound <- req
 
