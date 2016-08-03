@@ -50,22 +50,20 @@ type Connection struct {
 	hub           *RequestHub
 }
 
+// Request is a bgapi request struct
 type Request struct {
 	UUID      string
 	timestamp time.Time
-	resp      chan string
+	resp      chan *Event
+	err       chan error
 	command   string
 }
 
-type JobResponse struct {
-	UUID string
-	body string
-}
-
+// RequestHub is the asyn request/reply hub for bgapi commands
 type RequestHub struct {
 	requests  map[string]*Request
 	inbound   chan *Request
-	responses chan *JobResponse
+	responses chan *Event
 	timeout   chan bool
 }
 
@@ -84,17 +82,19 @@ func (h *RequestHub) run() {
 				request.UUID = "newUUIDfromFS"
 				h.requests[request.UUID] = request
 			case response := <-h.responses:
-				//TODO: look for UUID in event, and check for request in request object
 				fmt.Printf("RESPONSE %+v", response)
-				//h.requests[response.UUID].resp <- response.body
-				delete(h.requests, response.UUID)
+				req, ok := h.requests[response.Header["JobUUID"].(string)]
+				if ok != true {
+					break
+				}
 
-			/*case timeout := <-h.timeout:
+				delete(h.requests, req.UUID)
+			case _ = <-h.timeout:
 				for _, req := range h.requests {
-					if (time.Now - req.timestamp) > (time.Millisecond * requestTimeout) {
-						req.resp <- "Error: timeout"
+					if time.Since(req.timestamp) > (time.Millisecond * requestTimeout) {
+						req.err <- fmt.Errorf("bgapi command '%s' timed out", req.command)
 					}
-				}*/
+				}
 			}
 		}
 	}()
@@ -113,7 +113,7 @@ func newConnection(c net.Conn) *Connection {
 	hub := &RequestHub{
 		requests:  make(map[string]*Request),
 		inbound:   make(chan *Request),
-		responses: make(chan *JobResponse),
+		responses: make(chan *Event),
 		timeout:   make(chan bool),
 	}
 	h.hub = hub
@@ -294,15 +294,6 @@ func (h *Connection) readOne() bool {
 			h.err <- err
 			return false
 		}
-		// we dont return `BACKGROUND_JOB` events
-		if tmp["Event-Name"] == "BACKGROUND_JOB" {
-			j := &JobResponse{
-				UUID: tmp["Job-UUID"].(string),
-				body: tmp["_body"].(string),
-			}
-			h.hub.responses <- j
-			return true
-		}
 		// capitalize header keys for consistency.
 		for k, v := range tmp {
 			resp.Header[capitalize(k)] = v
@@ -312,6 +303,11 @@ func (h *Connection) readOne() bool {
 			delete(resp.Header, "_body")
 		} else {
 			resp.Body = ""
+		}
+		// we dont return `BACKGROUND_JOB` events
+		if resp.Header["Event-Name"] == "BACKGROUND_JOB" {
+			h.hub.responses <- resp
+			return true
 		}
 		h.evt <- resp
 	case "text/disconnect-notice":
@@ -430,10 +426,34 @@ func (h *Connection) Send(command string) (*Event, error) {
 }
 
 // Bgapi runs a background api request on freeswitch
-func (h *Connection) Bgapi(command string, resp chan string) {
+func (h *Connection) Bgapi(command string) (string, error) {
 	req := &Request{}
-	req.resp = resp
+	req.resp = make(chan *Event)
+	req.err = make(chan error)
+	req.command = command
+	req.timestamp = time.Now()
 
+	e, err := h.Send(fmt.Sprintf("bgapi %s", command))
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(e.Body, "+OK Job-UUID") {
+		return "", errors.New("bgapi command did not return Job-UUID")
+	}
+	bgapiSlice := strings.Split(e.Body, ":")
+	if len(bgapiSlice) != 2 {
+		return "", fmt.Errorf("Unexpected bgapi response: %s", e.Body)
+	}
+	jobID := strings.TrimSpace(bgapiSlice[1])
+	req.UUID = jobID
+	h.hub.inbound <- req
+
+	select {
+	case err := <-req.err:
+		return "", err
+	case ev := <-req.resp:
+		return ev.Body, nil
+	}
 }
 
 // MSG is the container used by SendMsg to store messages sent to FreeSWITCH.
