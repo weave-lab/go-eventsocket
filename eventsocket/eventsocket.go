@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	uuid "github.com/weave-lab/go-utilities/uuid"
+	"github.com/weave-lab/go-utilities/uuid"
 )
 
 const bufferSize = 1024 << 6 // For the socket reader
@@ -426,7 +426,7 @@ func (h *Connection) Send(command string) (*Event, error) {
 }
 
 // Bgapi runs a background api request on freeswitch
-func (h *Connection) Bgapi(command string) (string, error) {
+func (h *Connection) Bgapi(command string) (*Event, error) {
 	req := &Request{}
 	req.resp = make(chan *Event)
 	req.err = make(chan error)
@@ -435,20 +435,19 @@ func (h *Connection) Bgapi(command string) (string, error) {
 
 	u := uuid.NewV4()
 	jobID, _ := uuid.Formatter(u, uuid.CleanHyphen)
-
-	_, err := h.Send(fmt.Sprintf("bgapi %s\r\njob-uuid: %s", command, jobID))
-	if err != nil {
-		return "", err
-	}
-
 	req.UUID = jobID
 	h.hub.inbound <- req
 
+	_, err := h.Send(fmt.Sprintf("bgapi %s\r\njob-uuid: %s", command, jobID))
+	if err != nil {
+		return &Event{}, err
+	}
+
 	select {
 	case err := <-req.err:
-		return "", err
+		return &Event{}, err
 	case ev := <-req.resp:
-		return ev.Body, nil
+		return ev, nil
 	}
 }
 
