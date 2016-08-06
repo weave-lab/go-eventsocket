@@ -82,7 +82,6 @@ func (h *RequestHub) run() {
 			case request := <-h.inbound:
 				h.requests[request.UUID] = request
 			case response := <-h.responses:
-				fmt.Printf("RESPONSE %+v", response)
 				req, ok := h.requests[response.Header["Job-Uuid"].(string)]
 				if ok != true {
 					break
@@ -315,7 +314,6 @@ func (h *Connection) readOne() bool {
 		}
 		// we dont return `BACKGROUND_JOB` events
 		if resp.Header["Event-Name"] == "BACKGROUND_JOB" {
-			fmt.Println(resp)
 			h.hub.responses <- resp
 			return true
 		}
