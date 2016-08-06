@@ -87,7 +87,16 @@ func (h *RequestHub) run() {
 				if ok != true {
 					break
 				}
-
+				reply := response.Body
+				if strings.HasPrefix(reply, "-E") {
+					if len(reply) > 5 {
+						req.err <- errors.New(reply[5:])
+					} else {
+						req.err <- errors.New(reply)
+					}
+					break
+				}
+				req.resp <- response
 				delete(h.requests, req.UUID)
 			case _ = <-h.timeout:
 				for _, req := range h.requests {
@@ -306,6 +315,7 @@ func (h *Connection) readOne() bool {
 		}
 		// we dont return `BACKGROUND_JOB` events
 		if resp.Header["Event-Name"] == "BACKGROUND_JOB" {
+			fmt.Println(resp)
 			h.hub.responses <- resp
 			return true
 		}

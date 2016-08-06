@@ -16,10 +16,16 @@ const uuid = "TEST"
 
 func main() {
 	c, err := eventsocket.Dial("10.55.99.131:8021", "ClueCon")
+
+	fmt.Println(c)
 	if err != nil {
 		log.Fatal(err)
 	}
-	resp, _ := c.Bgapi(fmt.Sprintf("uuid_kill %s %s", uuid))
+	resp, err := c.Bgapi(fmt.Sprintf("uuid_kill %s", uuid))
+
+	if err != nil {
+		fmt.Printf("ERROR: %s", err)
+	}
 
 	fmt.Printf("RESPONSE: %+v", resp)
 	/*for {
