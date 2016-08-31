@@ -101,6 +101,7 @@ func (h *RequestHub) run() {
 				for _, req := range h.requests {
 					if time.Since(req.timestamp) > (time.Millisecond * requestTimeout) {
 						req.err <- fmt.Errorf("bgapi command '%s' timed out", req.command)
+						delete(h.requests, req.UUID)
 					}
 				}
 			}
