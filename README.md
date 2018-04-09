@@ -1,3 +1,5 @@
+[![pipeline status](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/badges/master/pipeline.svg)](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/commits/master)
+[![coverage report](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/badges/master/coverage.svg)](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/commits/master)
 # eventsocket
 
 FreeSWITCH [Event Socket](http://wiki.freeswitch.org/wiki/Event_Socket) library
