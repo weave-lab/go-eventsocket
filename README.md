@@ -1,3 +1,13 @@
+[![pipeline status](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/badges/master/pipeline.svg)](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/commits/master)
+[![coverage report](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/badges/master/coverage.svg)](https://gitlab.getweave.com/weave-lab/platform/go-eventsocket/commits/master)
+
+## Installation
+```bash
+go get weavelab.xyz/go-eventsocket
+```
+
+For more information on `weavelab.xyz`, see the projects [readme](https://gitlab.getweave.com/weave-lab/ops/xyz/blob/master/README.md).
+
 # eventsocket
 
 FreeSWITCH [Event Socket](http://wiki.freeswitch.org/wiki/Event_Socket) library
